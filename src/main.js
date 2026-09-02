@@ -33,7 +33,7 @@ let lastOnChangeTime = 0;
 let lastKeyPressTime = 0;
 let uiUpdateScheduled = false;
 
-// Warm GPU texture holding container
+// GPU texture holding container
 const preloadCacheContainer = document.createElement('div');
 preloadCacheContainer.id = 'img-preload-cache';
 preloadCacheContainer.style.cssText = 'position:absolute; width:0; height:0; overflow:hidden; opacity:0; pointer-events:none;';
@@ -46,9 +46,6 @@ const variantCount = document.getElementById('variantCount');
 const variantStrip = document.getElementById('variantStrip');
 const anchorLabel = document.getElementById('anchorLabel');
 
-/**
- * Non-blocking GPU texture decoding offloaded to browser idle time.
- */
 function preloadVariantImages(urls) {
   const toPreload = urls.filter(url => url && !preloadedImageUrls.has(url));
   if (!toPreload.length) return;
@@ -140,7 +137,6 @@ function scheduleUIUpdate() {
 }
 
 function performUIUpdate() {
-  // Render ON/OFF Power Toggle Switch in Header
   if (statusText) {
     const powerBtnBg = isExtensionEnabled ? '#22c55e' : '#ef4444';
     const powerLabel = isExtensionEnabled ? 'ON' : 'OFF';
@@ -310,7 +306,6 @@ function processItemPositionUpdates(items) {
       if (dist > 0.1) {
         knownItemStates.set(item.id, { x: item.position.x, y: item.position.y });
 
-        // Update isometric zIndex on every movement frame
         if (item.layer === 'CHARACTER' || item.layer === 'MOUNT' || item.id === activeId) {
           updateItemDepthOnly(item.id);
         }
@@ -401,7 +396,9 @@ async function syncSelection() {
     };
 
     lastSyncedVariantUrl = currentUrl;
-    if (item.position) knownItemStates.set(item.id, { x: item.position.x, y: item.position.y });
+    if (item.position) {
+      knownItemStates.set(item.id, { x: item.position.x, y: item.position.y });
+    }
     
     updateItemDepthOnly(item.id);
     scheduleUIUpdate();
