@@ -22,21 +22,16 @@ let isExtensionEnabled = true;
 let currentSelection = null;
 let currentGridDpi = 150;
 
-const knownItemStates = new Map(); // Stores base { x, y, scaleX, scaleY }
+const knownItemStates = new Map();
 const variantCache = new Map();
 const preloadedImageUrls = new Set();
 
 let desiredVariantUrl = null;
 let lastSyncedVariantUrl = null;
 let isSyncingVariant = false;
-let isApplyingBreath = false;
 let lastOnChangeTime = 0;
 let lastKeyPressTime = 0;
 let uiUpdateScheduled = false;
-
-// Breathing Animation State
-let breathIntervalId = null;
-let pauseBreathUntil = 0; // Timestamp to pause breathing during movement
 
 // Warm GPU texture holding container
 const preloadCacheContainer = document.createElement('div');
@@ -145,6 +140,7 @@ function scheduleUIUpdate() {
 }
 
 function performUIUpdate() {
+  // Render ON/OFF Power Toggle Switch in Header
   if (statusText) {
     const powerBtnBg = isExtensionEnabled ? '#22c55e' : '#ef4444';
     const powerLabel = isExtensionEnabled ? 'ON' : 'OFF';
@@ -159,11 +155,6 @@ function performUIUpdate() {
 
     document.getElementById('btnPowerToggle')?.addEventListener('click', () => {
       isExtensionEnabled = !isExtensionEnabled;
-      if (!isExtensionEnabled) {
-        stopBreathingLoop();
-      } else if (currentSelection) {
-        startBreathingLoop();
-      }
       scheduleUIUpdate();
     });
   }
@@ -299,74 +290,8 @@ async function updateItemDepthOnly(itemId) {
   });
 }
 
-/**
- * Feet-Grounded Breathing Animation Step
- * Calculates vertical scale reduction and offsets position.y so feet remain frozen on grid.
- */
-async function applyBreathingFrame() {
-  if (!isExtensionEnabled || !currentSelection || isSyncingVariant || Date.now() < pauseBreathUntil) return;
-  
-  const itemId = currentSelection.id;
-  const baseState = knownItemStates.get(itemId);
-  if (!baseState) return;
-
-  const now = performance.now();
-  // Smooth 2.8 second breathing loop
-  const cycle = (now % 2800) / 2800;
-  const sineVal = 0.5 + 0.5 * Math.sin(cycle * 2 * Math.PI);
-  
-  // Scale Y oscillates between 0.95 (breath out) and 1.00 (breath in)
-  const scaleFactor = 1.0 - (0.05 * sineVal);
-
-  isApplyingBreath = true;
-  try {
-    await OBR.scene.items.updateItems([itemId], (items) => {
-      for (const item of items) {
-        if (!item.image || !item.position || item.id !== itemId) continue;
-
-        const itemDpi = item.grid?.dpi || currentGridDpi || 150;
-        const sceneDpi = currentGridDpi || itemDpi;
-        const imgHeight = item.image?.height ?? itemDpi;
-        const baseScaleY = baseState.scaleY ?? item.scale?.y ?? 1;
-        const baseScaleX = baseState.scaleX ?? item.scale?.x ?? 1;
-        const heightInUnits = (imgHeight / itemDpi) * baseScaleY * sceneDpi;
-        const { y: anchorY } = getAnchorRatios(item);
-
-        // Vector Compensation: Offsets top-left position down so feet remain anchored
-        const deltaY = heightInUnits * anchorY * (1.0 - scaleFactor);
-
-        item.scale = {
-          x: baseScaleX,
-          y: baseScaleY * scaleFactor
-        };
-        item.position = {
-          x: baseState.x,
-          y: baseState.y + deltaY
-        };
-        item.zIndex = getItemIsoDepth(item);
-      }
-    });
-  } catch (err) {
-    // Quiet handling during rapid selection changes
-  } finally {
-    isApplyingBreath = false;
-  }
-}
-
-function startBreathingLoop() {
-  stopBreathingLoop();
-  breathIntervalId = setInterval(applyBreathingFrame, 160); // ~6fps subtle update loop
-}
-
-function stopBreathingLoop() {
-  if (breathIntervalId) {
-    clearInterval(breathIntervalId);
-    breathIntervalId = null;
-  }
-}
-
 function processItemPositionUpdates(items) {
-  if (!isExtensionEnabled || isApplyingBreath) return;
+  if (!isExtensionEnabled) return;
 
   const now = performance.now();
   const timeDelta = lastOnChangeTime ? (now - lastOnChangeTime).toFixed(1) : '0.0';
@@ -383,16 +308,7 @@ function processItemPositionUpdates(items) {
       const dist = Math.sqrt(dx * dx + dy * dy);
 
       if (dist > 0.1) {
-        // Update base position reference during actual walking/dragging
-        knownItemStates.set(item.id, { 
-          x: item.position.x, 
-          y: item.position.y,
-          scaleX: item.scale?.x ?? cached.scaleX ?? 1,
-          scaleY: item.scale?.y ?? cached.scaleY ?? 1
-        });
-
-        // Pause breathing briefly while walking to prevent motion jitter
-        pauseBreathUntil = Date.now() + 800;
+        knownItemStates.set(item.id, { x: item.position.x, y: item.position.y });
 
         // Update isometric zIndex on every movement frame
         if (item.layer === 'CHARACTER' || item.layer === 'MOUNT' || item.id === activeId) {
@@ -429,12 +345,7 @@ function processItemPositionUpdates(items) {
         }
       }
     } else {
-      knownItemStates.set(item.id, { 
-        x: item.position.x, 
-        y: item.position.y,
-        scaleX: item.scale?.x ?? 1,
-        scaleY: item.scale?.y ?? 1
-      });
+      knownItemStates.set(item.id, { x: item.position.x, y: item.position.y });
     }
   }
 }
@@ -458,7 +369,6 @@ async function syncSelection() {
   try {
     const selectedIds = await OBR.player.getSelection();
     if (!selectedIds || selectedIds.length !== 1) {
-      stopBreathingLoop();
       currentSelection = null;
       lastSyncedVariantUrl = null;
       desiredVariantUrl = null;
@@ -469,7 +379,6 @@ async function syncSelection() {
     const items = await OBR.scene.items.getItems(selectedIds);
     const item = items[0];
     if (!item || item.type !== 'IMAGE') {
-      stopBreathingLoop();
       currentSelection = null;
       lastSyncedVariantUrl = null;
       desiredVariantUrl = null;
@@ -492,21 +401,10 @@ async function syncSelection() {
     };
 
     lastSyncedVariantUrl = currentUrl;
-    if (item.position) {
-      knownItemStates.set(item.id, { 
-        x: item.position.x, 
-        y: item.position.y,
-        scaleX: item.scale?.x ?? 1,
-        scaleY: item.scale?.y ?? 1
-      });
-    }
+    if (item.position) knownItemStates.set(item.id, { x: item.position.x, y: item.position.y });
     
     updateItemDepthOnly(item.id);
     scheduleUIUpdate();
-
-    if (isExtensionEnabled) {
-      startBreathingLoop();
-    }
   } catch (err) {
     console.error('[SELECTION] Error syncing selection:', err);
   }
