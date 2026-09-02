@@ -1,0 +1,17 @@
+{
+  "name": "changr-hotkeys",
+  "version": "1.0.0",
+  "description": "Hotkey extension for Owlbear Rodeo v2 to swap Changr variants",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@owlbear-rodeo/sdk": "^2.3.0"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0"
+  }
+}
