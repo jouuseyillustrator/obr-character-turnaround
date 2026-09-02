@@ -286,6 +286,7 @@ async function updateItemDepthOnly(itemId) {
   await OBR.scene.items.updateItems([itemId], (items) => {
     for (const item of items) {
       item.zIndex = getItemIsoDepth(item);
+      item.rotation = 0;
     }
   });
 }
