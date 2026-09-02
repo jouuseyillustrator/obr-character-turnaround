@@ -4,7 +4,7 @@
   "version": "1.0.5",
   "action": {
     "title": "Changr Hotkeys",
-    "icon": "https://jouuseyillustrator.github.io/obr-character-turnaround/icon.svg?v=1.0.4",
+    "icon": "https://jouuseyillustrator.github.io/obr-character-turnaround/icon.svg?v=1.0.5",
     "popover": "https://jouuseyillustrator.github.io/obr-character-turnaround/index.html",
     "width": 380,
     "height": 110
