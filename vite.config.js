@@ -1,9 +1,9 @@
 import { defineConfig } from 'vite';
 
 export default defineConfig({
+  base: '/obr-character-turnaround/',
   server: {
     host: true,
-    base: '/obr-character-turnaround/',
     allowedHosts: true,
     cors: true,
     headers: {
