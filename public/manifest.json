@@ -1,7 +1,7 @@
 {
   "manifest_version": 1,
   "name": "Changr Hotkeys",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "action": {
     "title": "Changr Hotkeys",
     "icon": "https://jouuseyillustrator.github.io/obr-character-turnaround/icon.svg?v=1.0.4",
