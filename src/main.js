@@ -88,14 +88,10 @@ function getItemIsoDepth(item) {
   return Math.floor((feetY * 10) + (feetX * 0.001));
 }
 
-/**
- * Non-recursive stack-based variant URL scanner.
- */
 function extractVariants(metadata, itemId = null) {
   if (!metadata) return [];
   const foundUrls = new Set();
 
-  // Recursion or forward array processing preserves slot order: [FRONT, LEFT, RIGHT, BACK]
   function scan(val) {
     if (!val) return;
     if (typeof val === 'string') {
@@ -131,9 +127,6 @@ function getVariantsForSync(item) {
   return cached || extractVariants(item.metadata, item.id);
 }
 
-/**
- * Batched UI Renderer via requestAnimationFrame.
- */
 function scheduleUIUpdate() {
   if (uiUpdateScheduled) return;
   uiUpdateScheduled = true;
@@ -150,7 +143,7 @@ function performUIUpdate() {
     statusText.textContent = 'No token selected';
     variantCount.textContent = '';
     variantStrip.innerHTML = '<div class="no-selection">Select 1 image token on map to view 4-way turnaround</div>';
-    if (anchorLabel) anchorLabel.textContent = '';
+    if (anchorLabel) anchorLabel.innerHTML = '';
     return;
   }
 
@@ -163,7 +156,16 @@ function performUIUpdate() {
 
   if (anchorLabel) {
     const isTrunk = Math.abs(anchor.y - ANCHOR_PRESETS.TRUNK.y) < 0.01;
-    anchorLabel.textContent = `Anchor: ${isTrunk ? 'Trunk/Base' : 'Feet'} (y=${anchor.y.toFixed(2)})`;
+    anchorLabel.innerHTML = `
+      <div style="display:flex; align-items:center; gap:8px; margin-top:6px; font-size:12px; color:#aaa;">
+        <span>Anchor Depth:</span>
+        <button id="btnAnchorFeet" style="padding:2px 8px; border-radius:4px; border:1px solid ${!isTrunk ? '#4f46e5' : '#444'}; background:${!isTrunk ? '#4f46e5' : '#222'}; color:#fff; cursor:pointer;">Feet (1.0)</button>
+        <button id="btnAnchorTrunk" style="padding:2px 8px; border-radius:4px; border:1px solid ${isTrunk ? '#4f46e5' : '#444'}; background:${isTrunk ? '#4f46e5' : '#222'}; color:#fff; cursor:pointer;">Trunk/Base (0.75)</button>
+      </div>
+    `;
+
+    document.getElementById('btnAnchorFeet')?.addEventListener('click', () => setItemAnchor(currentSelection.id, ANCHOR_PRESETS.FEET));
+    document.getElementById('btnAnchorTrunk')?.addEventListener('click', () => setItemAnchor(currentSelection.id, ANCHOR_PRESETS.TRUNK));
   }
 
   let html = '';
@@ -251,6 +253,14 @@ async function flushVariantToOBR(itemId) {
   }
 }
 
+async function updateItemDepthOnly(itemId) {
+  await OBR.scene.items.updateItems([itemId], (items) => {
+    for (const item of items) {
+      item.zIndex = getItemIsoDepth(item);
+    }
+  });
+}
+
 function processItemPositionUpdates(items) {
   const now = performance.now();
   const timeDelta = lastOnChangeTime ? (now - lastOnChangeTime).toFixed(1) : '0.0';
@@ -258,7 +268,7 @@ function processItemPositionUpdates(items) {
   const activeId = currentSelection?.id;
 
   for (const item of items) {
-    if (!item.position || item.layer !== 'CHARACTER') continue;
+    if (!item.position) continue;
     const cached = knownItemStates.get(item.id);
 
     if (cached) {
@@ -268,6 +278,11 @@ function processItemPositionUpdates(items) {
 
       if (dist > 0.1) {
         knownItemStates.set(item.id, { x: item.position.x, y: item.position.y });
+
+        // Update isometric zIndex on every movement frame for proper depth sorting
+        if (item.layer === 'CHARACTER' || item.layer === 'MOUNT' || item.id === activeId) {
+          updateItemDepthOnly(item.id);
+        }
 
         if (item.id === activeId) {
           const variants = getVariantsForSync(item);
@@ -356,6 +371,9 @@ async function syncSelection() {
 
     lastSyncedVariantUrl = currentUrl;
     if (item.position) knownItemStates.set(item.id, { x: item.position.x, y: item.position.y });
+    
+    // Set depth on initial selection sync
+    updateItemDepthOnly(item.id);
     scheduleUIUpdate();
   } catch (err) {
     console.error('[SELECTION] Error syncing selection:', err);
