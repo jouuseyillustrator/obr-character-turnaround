@@ -1,11 +1,11 @@
 {
   "name": "Changr Hotkeys",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "manifest_version": 1,
   "action": {
     "title": "Changr Hotkeys",
-    "icon": "icon.svg",
-    "popover": "index.html",
+    "icon": "./icon.svg",
+    "popover": "./index.html",
     "width": 380,
     "height": 110
   }
