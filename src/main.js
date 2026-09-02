@@ -17,6 +17,8 @@ const ANCHOR_PRESETS = {
 
 const DEFAULT_ANCHOR = ANCHOR_PRESETS.FEET;
 
+// Extension Global State
+let isExtensionEnabled = true;
 let currentSelection = null;
 let currentGridDpi = 150;
 
@@ -138,9 +140,35 @@ function scheduleUIUpdate() {
 }
 
 function performUIUpdate() {
+  // Render ON/OFF Power Toggle Switch in Header
+  if (statusText) {
+    const powerBtnBg = isExtensionEnabled ? '#22c55e' : '#ef4444';
+    const powerLabel = isExtensionEnabled ? 'ON' : 'OFF';
+
+    statusText.innerHTML = `
+      <div style="display:flex; align-items:center; justify-content:space-between; width:100%;">
+        <span>${!isExtensionEnabled ? 'Extension Paused' : currentSelection ? `4-Way Turnaround (${Math.min(currentSelection.variants.length, 4)}/4 set)` : 'No token selected'}</span>
+        <button id="btnPowerToggle" style="padding:2px 10px; font-weight:bold; font-size:11px; border-radius:12px; border:none; background:${powerBtnBg}; color:#fff; cursor:pointer; transition:background 0.2s;">
+          ${powerLabel}
+        </button>
+      </div>`;
+
+    document.getElementById('btnPowerToggle')?.addEventListener('click', () => {
+      isExtensionEnabled = !isExtensionEnabled;
+      scheduleUIUpdate();
+    });
+  }
+
+  if (!isExtensionEnabled) {
+    statusDot.className = 'status-dot inactive';
+    variantCount.textContent = '';
+    variantStrip.innerHTML = '<div class="no-selection" style="color:#888;">Extension is OFF. Hotkeys & auto-turnaround movement are paused.</div>';
+    if (anchorLabel) anchorLabel.innerHTML = '';
+    return;
+  }
+
   if (!currentSelection) {
     statusDot.className = 'status-dot inactive';
-    statusText.textContent = 'No token selected';
     variantCount.textContent = '';
     variantStrip.innerHTML = '<div class="no-selection">Select 1 image token on map to view 4-way turnaround</div>';
     if (anchorLabel) anchorLabel.innerHTML = '';
@@ -151,7 +179,6 @@ function performUIUpdate() {
   const activeIndex = currentUrl ? variants.indexOf(currentUrl) : 0;
 
   statusDot.className = 'status-dot active';
-  statusText.textContent = `4-Way Turnaround (${Math.min(variants.length, 4)}/4 set)`;
   variantCount.textContent = variants.length > 4 ? `(+${variants.length - 4} extra)` : '';
 
   if (anchorLabel) {
@@ -198,6 +225,8 @@ function performUIUpdate() {
 }
 
 function applyVariant(index) {
+  if (!isExtensionEnabled) return;
+
   const now = performance.now();
   const delta = lastKeyPressTime ? (now - lastKeyPressTime).toFixed(1) : '0.0';
   lastKeyPressTime = now;
@@ -219,11 +248,11 @@ function applyVariant(index) {
 }
 
 async function flushVariantToOBR(itemId) {
-  if (isSyncingVariant) return;
+  if (isSyncingVariant || !isExtensionEnabled) return;
   isSyncingVariant = true;
 
   try {
-    while (desiredVariantUrl !== null && desiredVariantUrl !== lastSyncedVariantUrl) {
+    while (desiredVariantUrl !== null && desiredVariantUrl !== lastSyncedVariantUrl && isExtensionEnabled) {
       const urlToSend = desiredVariantUrl;
       const t0 = performance.now();
 
@@ -247,7 +276,7 @@ async function flushVariantToOBR(itemId) {
     console.error('[IPC FLUSH] ERROR during variant sync:', err);
   } finally {
     isSyncingVariant = false;
-    if (desiredVariantUrl !== null && desiredVariantUrl !== lastSyncedVariantUrl) {
+    if (desiredVariantUrl !== null && desiredVariantUrl !== lastSyncedVariantUrl && isExtensionEnabled) {
       flushVariantToOBR(itemId);
     }
   }
@@ -262,6 +291,8 @@ async function updateItemDepthOnly(itemId) {
 }
 
 function processItemPositionUpdates(items) {
+  if (!isExtensionEnabled) return;
+
   const now = performance.now();
   const timeDelta = lastOnChangeTime ? (now - lastOnChangeTime).toFixed(1) : '0.0';
   lastOnChangeTime = now;
@@ -279,7 +310,7 @@ function processItemPositionUpdates(items) {
       if (dist > 0.1) {
         knownItemStates.set(item.id, { x: item.position.x, y: item.position.y });
 
-        // Update isometric zIndex on every movement frame for proper depth sorting
+        // Update isometric zIndex on every movement frame
         if (item.layer === 'CHARACTER' || item.layer === 'MOUNT' || item.id === activeId) {
           updateItemDepthOnly(item.id);
         }
@@ -372,7 +403,6 @@ async function syncSelection() {
     lastSyncedVariantUrl = currentUrl;
     if (item.position) knownItemStates.set(item.id, { x: item.position.x, y: item.position.y });
     
-    // Set depth on initial selection sync
     updateItemDepthOnly(item.id);
     scheduleUIUpdate();
   } catch (err) {
@@ -381,6 +411,7 @@ async function syncSelection() {
 }
 
 window.addEventListener('keydown', (e) => {
+  if (!isExtensionEnabled) return;
   if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return;
 
   const num = parseInt(e.key, 10);
@@ -404,7 +435,7 @@ OBR.onReady(async () => {
   OBR.player.onChange(() => syncSelection());
   OBR.scene.items.onChange((items) => {
     processItemPositionUpdates(items);
-    if (currentSelection) {
+    if (currentSelection && isExtensionEnabled) {
       const activeItem = items.find((i) => i.id === currentSelection.id);
       if (activeItem) {
         let uiNeedsUpdate = false;
